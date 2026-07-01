@@ -42,12 +42,13 @@ export async function action({ request }: Route.ActionArgs) {
   const intent = formData.get("intent");
 
   if (intent === "toggle") {
-  const id = formData.get("id") as string;;
+  const id = formData.get("id") as string;
   const isActive = formData.get("isActive") === "true";
 
-  await prisma.recurringExpense.update({
+  await prisma.recurringExpense.updateMany({
     where: {
       id,
+      userId:user.id
     },
     data: {
       isActive,
