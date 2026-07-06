@@ -18,19 +18,21 @@ const ExtractedReceiptSchema = z.object({
 });
 
 export async function action({ request }: Route.ActionArgs) {
-  if (request.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
-  }
+  const { supabase, headers } = getSupabaseServerClient(request);
 
-  const { supabase } = getSupabaseServerClient(request);
+  if (request.method !== "POST") {
+    headers.set("Content-Type", "application/json");
+    return new Response("Method not allowed", { status: 405, headers });
+  }
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
+    headers.set("Content-Type", "application/json");
     return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
       status: 401,
-      headers: { "Content-Type": "application/json" },
+      headers,
     });
   }
 
@@ -38,34 +40,38 @@ export async function action({ request }: Route.ActionArgs) {
   try {
     formData = await request.formData();
   } catch {
+    headers.set("Content-Type", "application/json");
     return new Response(JSON.stringify({ ok: false, error: "Invalid form data." }), {
       status: 400,
-      headers: { "Content-Type": "application/json" },
+      headers,
     });
   }
 
   const imageFile = formData.get("image");
 
   if (!imageFile || !(imageFile instanceof File) || imageFile.size === 0) {
+    headers.set("Content-Type", "application/json");
     return new Response(JSON.stringify({ ok: false, error: "No image file provided." }), {
       status: 400,
-      headers: { "Content-Type": "application/json" },
+      headers,
     });
   }
 
   // Limit file size to 10 MB
   if (imageFile.size > 10 * 1024 * 1024) {
+    headers.set("Content-Type", "application/json");
     return new Response(JSON.stringify({ ok: false, error: "Image is too large. Please upload an image under 10 MB." }), {
       status: 400,
-      headers: { "Content-Type": "application/json" },
+      headers,
     });
   }
 
   const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
   if (!allowedTypes.includes(imageFile.type)) {
+    headers.set("Content-Type", "application/json");
     return new Response(JSON.stringify({ ok: false, error: "Unsupported image format. Use JPEG, PNG, or WebP." }), {
       status: 400,
-      headers: { "Content-Type": "application/json" },
+      headers,
     });
   }
 
@@ -75,7 +81,7 @@ export async function action({ request }: Route.ActionArgs) {
     const dataUrl = `data:${imageFile.type};base64,${base64}`;
 
     const { object } = await generateObject({
-      model: groq("meta-llama/llama-4-scout-17b-16e-instruct"),
+      model: groq("llama-3.2-11b-vision-preview"),
       schema: ExtractedReceiptSchema,
       messages: [
         {
@@ -100,18 +106,20 @@ Return only the extracted data. Do not guess or fabricate values — only extrac
       ],
     });
 
+    headers.set("Content-Type", "application/json");
     return new Response(JSON.stringify({ ok: true, data: object }), {
       status: 200,
-      headers: { "Content-Type": "application/json" },
+      headers,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("[api/ai/ocr] Vision extraction failed:", message);
+    headers.set("Content-Type", "application/json");
     return new Response(
       JSON.stringify({ ok: false, error: "AI extraction failed. Please try again or fill the form manually." }),
       {
         status: 500,
-        headers: { "Content-Type": "application/json" },
+        headers,
       },
     );
   }
